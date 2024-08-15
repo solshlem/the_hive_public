@@ -1,0 +1,114 @@
+version: "3.5"
+services:
+  thehive1:
+    image: strangebee/thehive:5.2
+    depends_on:
+      - cassandra1
+    mem_limit: 1500m
+    ports:
+      - "9001:9000"
+    networks:
+      - common
+    environment:
+      - JVM_OPTS="-Xms1024M -Xmx1024M"
+    volumes:
+      - ./conf:/data/conf
+    command:
+      - --secret
+      - "mySecretForTheHive"
+      - "--cql-hostnames"
+      - "cassandra1"
+      - --config-file
+      - /data/conf/application.conf
+
+  cassandra1:
+    image: 'cassandra:4'
+    mem_limit: 1600m
+    ports:
+      - "9042:9042"
+    networks:
+      - common
+    environment:
+      - MAX_HEAP_SIZE=1024M
+      - HEAP_NEWSIZE=1024M
+      - CASSANDRA_CLUSTER_NAME=TheHive
+    volumes:
+      - cassandradata1:/var/lib/cassandra
+    restart: on-failure
+  
+  thehive2:
+    image: strangebee/thehive:5.2
+    depends_on:
+      - cassandra2
+    mem_limit: 1500m
+    ports:
+      - "9002:9000"
+    networks:
+      - common
+    environment:
+      - JVM_OPTS="-Xms1024M -Xmx1024M"
+    command:
+      - --secret
+      - "mySecretForTheHive"
+      - "--cql-hostnames"
+      - "cassandra2"
+
+  cassandra2:
+    image: 'cassandra:4'
+    mem_limit: 1600m
+    ports:
+      - "9043:9042"
+    networks:
+      - common
+    environment:
+      - MAX_HEAP_SIZE=1024M
+      - HEAP_NEWSIZE=1024M
+      - CASSANDRA_CLUSTER_NAME=TheHive
+    volumes:
+      - cassandradata2:/var/lib/cassandra
+    restart: on-failure
+
+  nats:
+    image: nats
+    ports:
+      - "8222:8222"
+      - "4222:4222"
+      - "6222:6222"
+    command: "--cluster_name NATS --cluster nats://0.0.0.0:6222 --http_port 8222 "
+    networks:
+      common:
+        ipv4_address: 172.22.0.11
+  nats-1:
+    image: nats
+    command: "--cluster_name NATS --cluster nats://0.0.0.0:6222 --routes=nats://ruser:T0pS3cr3t@172.22.0.11:6222"
+    networks:
+      - common
+    depends_on: ["nats"]
+  nats-2:
+    image: nats
+    command: "--cluster_name NATS --cluster nats://0.0.0.0:6222 --routes=nats://ruser:T0pS3cr3t@172.22.0.11:6222"
+    networks:
+      - common
+    depends_on: ["nats"]
+  
+  web:
+    build: ./webhook
+    ports:
+      - "5000:5000"
+    networks:
+      common:
+        ipv4_address: 172.22.0.10
+    volumes:
+      - ./cases.db:/python-docker/cases.db
+      
+
+volumes:
+  cassandradata1:
+  cassandradata2:
+
+networks:
+  common:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.22.0.0/24
